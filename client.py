@@ -16,6 +16,11 @@ class MCPClient:
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com/v1")
+        self.session_messages = []
+
+    async def send_message(self, messages: list, tools: list) -> str:
+        response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
+        return response.choices[0].message
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -62,7 +67,9 @@ class MCPClient:
         final_text = []
         # assistant_message_content = []
 
-        messages = [{"role": "user", "content": query}]
+        self.session_messages.append({"role": "user", "content": query})
+
+        # messages = [{"role": "user", "content": query}]
         tools = await self.session.list_tools()
         available_tools = [
             {
@@ -72,13 +79,11 @@ class MCPClient:
             for tool in tools.tools
         ]
 
-        response = self.deepseek.chat.completions.create(
-            model="deepseek-chat", messages=messages, tools=available_tools
-        )
-        response = response.choices[0].message
+        response = await self.send_message(self.session_messages, available_tools)
 
         if not response.tool_calls:
             final_text.append(response.content)
+            self.session_messages.append(response)
             # assistant_message_content.append(response)
         else:
             for tool_call in response.tool_calls:
@@ -89,16 +94,14 @@ class MCPClient:
                 final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
                 # assistant_message_content.append(response)
-                messages.append(response)
-                messages.append(
+                self.session_messages.append(response)
+                self.session_messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": tool_call_result.content[0].text}
                 )
 
-                response = self.deepseek.chat.completions.create(
-                    model="deepseek-chat", messages=messages, tools=available_tools
-                )
+                response = await self.send_message(self.session_messages, available_tools)
 
-                final_text.append(response.choices[0].message.content)
+                final_text.append(response.content)
 
         return "\n".join(final_text)
 
