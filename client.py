@@ -121,6 +121,8 @@ async def main():
         await client.chat_loop()
     finally:
         await client.cleanup()
+    
+    print(client.session_messages)
 
 
 if __name__ == "__main__":
