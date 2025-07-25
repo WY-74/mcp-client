@@ -1,5 +1,6 @@
 import os
 import asyncio
+import json
 from typing import Optional
 from contextlib import AsyncExitStack
 
@@ -14,15 +15,7 @@ class MCPClient:
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
-        self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
-
-    def send_messages(self, messages: list, available_tools: list):
-        response = self.deepseek.chat.completions.create(
-            model="deepseek-chat",
-            messages=messages,
-            tools=available_tools,
-        )
-        return response
+        self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com/v1")
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -36,11 +29,7 @@ class MCPClient:
             raise ValueError("Server script must be a .py or .js file")
 
         command = "python" if is_python else "node"
-        server_params = StdioServerParameters(
-            command=command,
-            args=[server_script_path],
-            env=None
-        )
+        server_params = StdioServerParameters(command=command, args=[server_script_path], env=None)
 
         stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
         self.stdio, self.write = stdio_transport
@@ -70,32 +59,59 @@ class MCPClient:
                 print(f"\nError: {str(e)}")
 
     async def process_query(self, query: str) -> str:
+        final_text = []
+        # assistant_message_content = []
+
         messages = [{"role": "user", "content": query}]
         tools = await self.session.list_tools()
-        available_tools = [{
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.inputSchema
+        available_tools = [
+            {
+                "type": "function",
+                "function": {"name": tool.name, "description": tool.description, "parameters": tool.inputSchema},
             }
-        } for tool in tools.tools]
+            for tool in tools.tools
+        ]
 
-        response = self.send_messages(messages, available_tools)
-        
-        print(response)
-        #TODO: no tools
+        response = self.deepseek.chat.completions.create(
+            model="deepseek-chat", messages=messages, tools=available_tools
+        )
+        response = response.choices[0].message
 
+        if not response.tool_calls:
+            final_text.append(response.content)
+            # assistant_message_content.append(response)
+        else:
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = tool_call.function.arguments
+
+                tool_call_result = await self.session.call_tool(tool_name, json.loads(tool_args))
+                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
+
+                # assistant_message_content.append(response)
+                messages.append(response)
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call.id, "content": tool_call_result.content[0].text}
+                )
+
+                response = self.deepseek.chat.completions.create(
+                    model="deepseek-chat", messages=messages, tools=available_tools
+                )
+
+                final_text.append(response.choices[0].message.content)
+
+        return "\n".join(final_text)
 
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
 
+
 async def main():
     if len(sys.argv) != 2:
         print("Usage: python client.py <server_script_path>")
         sys.exit(1)
-    
+
     client = MCPClient()
     try:
         await client.connect_to_server(sys.argv[1])
@@ -106,5 +122,5 @@ async def main():
 
 if __name__ == "__main__":
     import sys
+
     asyncio.run(main())
-    #  What’s the weather in Sacramento?
