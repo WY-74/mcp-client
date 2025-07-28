@@ -6,6 +6,7 @@ from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import PromptReference, ResourceTemplateReference
 
 from openai import OpenAI
 
@@ -42,9 +43,31 @@ class MCPClient:
 
         await self.session.initialize()
 
-        response = await self.session.list_tools()
-        tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in tools])
+        templates = await self.session.list_resource_templates()
+        print("Available resource templates:")
+        for template in templates.resourceTemplates:
+            print(f"  - {template.uriTemplate}")
+
+        prompts = await self.session.list_prompts()
+        print("\nAvailable prompts:")
+        for prompt in prompts.prompts:
+            print(f"  - {prompt.name}")
+
+        if templates.resourceTemplates:
+            template = templates.resourceTemplates[0]
+            print(f"\nCompleting arguments for resource template: {template.uriTemplate}")
+
+        result = await self.session.complete(
+            ref=ResourceTemplateReference(type="ref/resource", uri=template.uriTemplate),
+            argument={"name": "W", "value": "model"}
+        )
+        ##TODO: How to use this?
+        print(result)
+        print(f"Completions for 'name' starting with 'model': {result.completion.values}")
+
+        # response = await self.session.list_tools()
+        # tools = response.tools
+        # print("\nConnected to server with tools:", [tool.name for tool in tools])
 
     async def chat_loop(self):
         print("\nMCP Client Started!")
