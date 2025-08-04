@@ -80,28 +80,27 @@ class MCPClient:
         ]
 
         response = await self.send_message(self.session_messages, available_tools)
+        self.session_messages.append(response)
 
         if not response.tool_calls:
             final_text.append(response.content)
-            self.session_messages.append(response)
-            # assistant_message_content.append(response)
         else:
-            for tool_call in response.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = tool_call.function.arguments
+            tool = response.tool_calls[0]
+            tool_name = tool.function.name
+            tool_args = tool.function.arguments
 
-                tool_call_result = await self.session.call_tool(tool_name, json.loads(tool_args))
-                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
+            tool_call_result = await self.session.call_tool(tool_name, json.loads(tool_args))
+            final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
-                # assistant_message_content.append(response)
-                self.session_messages.append(response)
-                self.session_messages.append(
-                    {"role": "tool", "tool_call_id": tool_call.id, "content": tool_call_result.content[0].text}
-                )
+            # assistant_message_content.append(response)
+            self.session_messages.append(
+                {"role": "tool", "tool_call_id": tool.id, "content": tool_call_result.content[0].text}
+            )
 
-                response = await self.send_message(self.session_messages, available_tools)
+            response = await self.send_message(self.session_messages, available_tools)
+            self.session_messages.append(response)
 
-                final_text.append(response.content)
+            final_text.append(response.content)
 
         return "\n".join(final_text)
 
@@ -121,8 +120,6 @@ async def main():
         await client.chat_loop()
     finally:
         await client.cleanup()
-
-    print(client.session_messages)
 
 
 if __name__ == "__main__":
