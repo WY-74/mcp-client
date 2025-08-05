@@ -41,3 +41,6 @@ class Conversations:
 
     def get_current_context(self) -> Optional[ConversationContext]:
         return self.contexts.get(self.current, None)
+
+    def list_contexts(self) -> List[str]:
+        return list(self.contexts.keys())

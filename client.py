@@ -34,6 +34,18 @@ class MCPClient:
             self.conversations.switch_context(context_id)
             print(f"Switched to context: {context_id}")
 
+    def _handle_list_command(self):
+        context_ids = self.conversations.list_contexts()
+        if context_ids:
+            print("Available contexts:")
+            for context_id in context_ids:
+                if context_id == self.conversations.current:
+                    print(f"\t- {context_id} (current)")
+                else:
+                    print(f"\t- {context_id}")
+        else:
+            print("No contexts available")
+
     async def _send_message(self, messages: list, tools: list) -> str:
         response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
         return response.choices[0].message
@@ -68,6 +80,7 @@ class MCPClient:
         print("Commands:")
         print("- 'new <context_id>' - Create new conversation context")
         print("- 'switch <context_id>' - Switch to context")
+        print("- 'list' - List all contexts")
         print("- 'quit' - Exit")
         print("- Or just type your query for current context")
 
@@ -81,6 +94,8 @@ class MCPClient:
                     self._handle_new_command(query)
                 elif query.startswith('switch '):
                     self._handle_switch_command(query)
+                elif query == "list":
+                    self._handle_list_command()
                 else:
                     response = await self.process_query(query)
                     print("\nResponse: ", response)
