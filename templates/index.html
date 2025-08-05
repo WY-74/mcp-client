@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Chat Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mcp/mcp.css') }}">
+</head>
+<body class="has-nav">
+    <div class="nav-links">
+        <a href="/">QR Code Generator</a>
+        <a href="/mcp">MCP Chat</a>
+        <a href="/about">About</a>
+    </div>
+    
+    <div class="mcp-container">
+        <h1>MCP Chat Interface</h1>
+        
+        <div id="statusDiv" class="status status-disconnected">
+            Disconnected from MCP server
+        </div>
+        
+        <button id="connectBtn" class="btn btn-success">
+            Connect to MCP Server
+        </button>
+        
+        <div class="chat-container" id="chatContainer">
+            <!-- Messages will be added here dynamically -->
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="queryInput" class="mcp-input" placeholder="Ask a weather question..." disabled>
+            <button id="sendBtn" class="btn btn-primary" disabled>Send</button>
+        </div>
+        
+        <div class="tools-section" id="toolsSection" style="display: none;">
+            <h3>Available Tools:</h3>
+            <div id="toolsList"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='mcp/mcp.js') }}"></script>
+</body>
+</html>
