@@ -3,6 +3,7 @@ from views import mcp
 
 
 app = Flask(__name__)
+app.secret_key = 'wangyun777444'
 app.register_blueprint(mcp)
 
 

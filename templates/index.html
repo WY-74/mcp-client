@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCP Chat Interface</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='mcp/mcp.css') }}">
 </head>
 <body class="has-nav">
@@ -30,8 +29,8 @@
         </div>
         
         <div class="input-container">
-            <input type="text" id="queryInput" class="mcp-input" placeholder="Ask a weather question..." disabled>
-            <button id="sendBtn" class="btn btn-primary" disabled>Send</button>
+            <input type="text" id="queryInput" style="display: none;" disabled>
+            <button id="sendBtn" style="display: none;" disabled>Send</button>
         </div>
         
         <div class="tools-section" id="toolsSection" style="display: none;">

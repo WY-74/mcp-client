@@ -9,7 +9,6 @@ class MCPChat {
 
     init() {
         this.setupEventListeners();
-        this.showWelcomeMessage();
     }
 
     setupEventListeners() {
@@ -36,11 +35,6 @@ class MCPChat {
         }
     }
 
-    showWelcomeMessage() {
-        const welcomeMsg = "Welcome to MCP Chat! Connect to the server first, then start asking questions about weather.";
-        this.addMessage(welcomeMsg, 'assistant');
-    }
-
     async connectToMCP() {
         const connectBtn = document.getElementById('connectBtn');
         const statusDiv = document.getElementById('statusDiv');
@@ -63,9 +57,7 @@ class MCPChat {
             const result = await response.json();
             
             if (result.success) {
-                this.handleConnectionSuccess();
-                await this.loadTools();
-                this.addMessage("Connected to MCP weather server! You can now ask weather questions.", 'assistant');
+                this.handleConnectionSuccess(result.message);
             } else {
                 this.handleConnectionError(result.message);
             }
@@ -78,7 +70,7 @@ class MCPChat {
         }
     }
 
-    handleConnectionSuccess() {
+    handleConnectionSuccess(message) {
         this.isConnected = true;
         
         const statusDiv = document.getElementById('statusDiv');
@@ -88,7 +80,8 @@ class MCPChat {
 
         if (statusDiv) {
             statusDiv.className = 'status status-connected';
-            statusDiv.textContent = 'Connected to MCP server';
+            statusDiv.style.whiteSpace = 'pre-line';
+            statusDiv.textContent = message;
         }
 
         if (connectBtn) {
@@ -96,12 +89,17 @@ class MCPChat {
         }
 
         if (queryInput) {
+            queryInput.style.display = 'block';
             queryInput.disabled = false;
-            queryInput.placeholder = 'Ask a weather question...';
+            queryInput.placeholder = 'Ask a question...';
+            queryInput.className = 'mcp-input';
         }
 
         if (sendBtn) {
+            sendBtn.style.display = 'block';
             sendBtn.disabled = false;
+            sendBtn.className = 'btn btn-primary';
+            sendBtn.textContent = 'Send';
         }
     }
 
@@ -120,40 +118,6 @@ class MCPChat {
         }
 
         this.addMessage(`Connection failed: ${message}`, 'assistant');
-    }
-
-    async loadTools() {
-        try {
-            const response = await fetch('/mcp/tools');
-            const result = await response.json();
-            
-            if (result.tools && result.tools.length > 0) {
-                this.displayTools(result.tools);
-            }
-        } catch (error) {
-            console.error('Error loading tools:', error);
-        }
-    }
-
-    displayTools(tools) {
-        const toolsSection = document.getElementById('toolsSection');
-        const toolsList = document.getElementById('toolsList');
-        
-        if (!toolsSection || !toolsList) return;
-
-        toolsList.innerHTML = '';
-        
-        tools.forEach(tool => {
-            const toolDiv = document.createElement('div');
-            toolDiv.className = 'tool-item';
-            toolDiv.innerHTML = `
-                <strong>${this.escapeHtml(tool.name)}</strong>
-                ${this.escapeHtml(tool.description)}
-            `;
-            toolsList.appendChild(toolDiv);
-        });
-        
-        toolsSection.style.display = 'block';
     }
 
     async sendQuery() {
