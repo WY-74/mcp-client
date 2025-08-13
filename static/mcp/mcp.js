@@ -47,7 +47,7 @@ class MCPChat {
         connectBtn.classList.add('loading');
         
         try {
-            const response = await fetch('/mcp/connect', {
+            const response = await fetch('/atgent/connect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -91,7 +91,7 @@ class MCPChat {
         if (queryInput) {
             queryInput.style.display = 'block';
             queryInput.disabled = false;
-            queryInput.placeholder = 'Ask a question...';
+            queryInput.placeholder = '与 ATGent 对话';
             queryInput.className = 'mcp-input';
         }
 
@@ -100,6 +100,10 @@ class MCPChat {
             sendBtn.disabled = false;
             sendBtn.className = 'btn btn-primary';
             sendBtn.textContent = 'Send';
+        }
+
+        if (chatContainer) {
+            chatContainer.style.display = 'block';
         }
     }
 
@@ -129,12 +133,7 @@ class MCPChat {
         const query = queryInput.value.trim();
         
         if (!query) {
-            this.showInputError('Please enter a question');
-            return;
-        }
-
-        if (!this.isConnected) {
-            this.addMessage('Please connect to MCP server first', 'assistant');
+            this.showInputError('请输入你的问题');
             return;
         }
 
@@ -149,7 +148,7 @@ class MCPChat {
         sendBtn.classList.add('loading');
         
         try {
-            const response = await fetch('/mcp/query', {
+            const response = await fetch('/atgent/query', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -237,26 +236,9 @@ class MCPChat {
         }
     }
 
-    // Utility method to show examples
-    showExamples() {
-        const examples = [
-            "Get weather alerts for CA",
-            "Get forecast for latitude 37.7749, longitude -122.4194",
-            "What's the weather like in San Francisco?",
-            "Are there any weather warnings for Texas?"
-        ];
-
-        const exampleText = "Here are some example questions you can ask:\n\n" + 
-            examples.map(ex => `• ${ex}`).join('\n');
-        
-        this.addMessage(exampleText, 'assistant');
-    }
 }
 
 // Initialize MCP Chat when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     const mcpChat = new MCPChat();
-    
-    // Add examples button functionality if needed
-    window.showExamples = () => mcpChat.showExamples();
 });

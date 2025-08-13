@@ -1,7 +1,6 @@
 import os
-import asyncio
 import json
-from typing import Optional, Dict
+from typing import Optional
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -62,7 +61,6 @@ class MCPClient:
         ]
 
         response = await self._send_message(context.get_messages(), available_tools)
-        print("### response:", response)
         context.add_message(response)
 
         if not response.tool_calls:
@@ -75,7 +73,6 @@ class MCPClient:
             tool_call_result = await self.client_session.call_tool(tool_name, json.loads(tool_args))
             final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
-            # assistant_message_content.append(response)
             context.add_message({"role": "tool", "tool_call_id": tool.id, "content": tool_call_result.content[0].text})
 
             response = await self._send_message(context.get_messages(), available_tools)
@@ -88,22 +85,3 @@ class MCPClient:
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
-
-
-# async def main():
-#     if len(sys.argv) != 2:
-#         print("Usage: python client.py <server_script_path>")
-#         sys.exit(1)
-
-#     client = MCPClient()
-#     try:
-#         await client.connect_to_server(sys.argv[1])
-#         await client.chat_loop()
-#     finally:
-#         await client.cleanup()
-
-
-# if __name__ == "__main__":
-#     import sys
-
-#     asyncio.run(main())

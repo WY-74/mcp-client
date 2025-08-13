@@ -3,31 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCP Chat Interface</title>
+    <title>ATGent</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='mcp/mcp.css') }}">
 </head>
 <body class="has-nav">
-    <div class="nav-links">
-        <a href="/">QR Code Generator</a>
-        <a href="/mcp">MCP Chat</a>
-        <a href="/about">About</a>
-    </div>
-    
     <div class="mcp-container">
-        <h1>MCP Chat Interface</h1>
+        <h1>ATGent</h1>
+        <div id="statusDiv" class="status status-disconnected"> Disconnected from MCP server </div>
         
-        <div id="statusDiv" class="status status-disconnected">
-            Disconnected from MCP server
-        </div>
+        <button id="connectBtn" class="btn btn-success"> Connect </button>
         
-        <button id="connectBtn" class="btn btn-success">
-            Connect to MCP Server
-        </button>
-        
-        <div class="chat-container" id="chatContainer">
-            <!-- Messages will be added here dynamically -->
-        </div>
-        
+        <div class="chat-container" id="chatContainer" style="display: none;"> </div>
+
         <div class="input-container">
             <input type="text" id="queryInput" style="display: none;" disabled>
             <button id="sendBtn" style="display: none;" disabled>Send</button>
