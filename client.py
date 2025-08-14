@@ -1,7 +1,6 @@
 import os
-import asyncio
 import json
-from typing import Optional, Dict
+from typing import Optional
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -14,37 +13,10 @@ from conversations import Conversations
 
 class MCPClient:
     def __init__(self):
-        # Initialize session and client objects
         self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com/v1")
         self.exit_stack = AsyncExitStack()
         self.client_session: Optional[ClientSession] = None
         self.conversations = Conversations()
-
-    def _handle_new_command(self, context_id: str):
-        parts = context_id.split(' ', 1)
-        if len(parts) == 2:
-            _, context_id = parts
-            self.conversations.create_context(context_id)
-            print(f"Created context: {context_id}")
-
-    def _handle_switch_command(self, context_id: str):
-        parts = context_id.split(' ', 1)
-        if len(parts) == 2:
-            _, context_id = parts
-            self.conversations.switch_context(context_id)
-            print(f"Switched to context: {context_id}")
-
-    def _handle_list_command(self):
-        context_ids = self.conversations.list_contexts()
-        if context_ids:
-            print("Available contexts:")
-            for context_id in context_ids:
-                if context_id == self.conversations.current:
-                    print(f"\t- {context_id} (current)")
-                else:
-                    print(f"\t- {context_id}")
-        else:
-            print("No contexts available")
 
     async def _send_message(self, messages: list, tools: list) -> str:
         response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
@@ -70,38 +42,6 @@ class MCPClient:
 
         await self.client_session.initialize()
         self.conversations.create_context("default")
-
-        response = await self.client_session.list_tools()
-        tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in tools])
-
-    async def chat_loop(self):
-        print("\nMCP Client Started!")
-        print("Commands:")
-        print("- 'new <context_id>' - Create new conversation context")
-        print("- 'switch <context_id>' - Switch to context")
-        print("- 'list' - List all contexts")
-        print("- 'quit' - Exit")
-        print("- Or just type your query for current context")
-
-        while True:
-            try:
-                query = input("Query: ").strip()
-
-                if query.lower() == 'quit':
-                    break
-                elif query.startswith('new '):
-                    self._handle_new_command(query)
-                elif query.startswith('switch '):
-                    self._handle_switch_command(query)
-                elif query == "list":
-                    self._handle_list_command()
-                else:
-                    response = await self.process_query(query)
-                    print("\nResponse: ", response)
-
-            except Exception as e:
-                print(f"\nError: {str(e)}")
 
     async def process_query(self, query: str) -> str:
         context = self.conversations.get_current_context()
@@ -133,7 +73,6 @@ class MCPClient:
             tool_call_result = await self.client_session.call_tool(tool_name, json.loads(tool_args))
             final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
-            # assistant_message_content.append(response)
             context.add_message({"role": "tool", "tool_call_id": tool.id, "content": tool_call_result.content[0].text})
 
             response = await self._send_message(context.get_messages(), available_tools)
@@ -146,22 +85,3 @@ class MCPClient:
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
-
-
-async def main():
-    if len(sys.argv) != 2:
-        print("Usage: python client.py <server_script_path>")
-        sys.exit(1)
-
-    client = MCPClient()
-    try:
-        await client.connect_to_server(sys.argv[1])
-        await client.chat_loop()
-    finally:
-        await client.cleanup()
-
-
-if __name__ == "__main__":
-    import sys
-
-    asyncio.run(main())

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATGent</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='mcp/mcp.css') }}">
+</head>
+<body class="has-nav">
+    <div class="mcp-container">
+        <h1>ATGent</h1>
+        <div id="statusDiv" class="status status-disconnected"> Disconnected from MCP server </div>
+        
+        <button id="connectBtn" class="btn btn-success"> Connect </button>
+        
+        <div class="chat-container" id="chatContainer" style="display: none;"> </div>
+
+        <div class="input-container">
+            <input type="text" id="queryInput" style="display: none;" disabled>
+            <button id="sendBtn" style="display: none;" disabled>Send</button>
+        </div>
+        
+        <div class="tools-section" id="toolsSection" style="display: none;">
+            <h3>Available Tools:</h3>
+            <div id="toolsList"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='mcp/mcp.js') }}"></script>
+</body>
+</html>
