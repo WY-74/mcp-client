@@ -5,8 +5,8 @@ from flask import Blueprint, render_template, jsonify, session, request
 from client import MCPClient
 
 
-mcp = Blueprint('main', __name__)
-clients = {}
+atgent = Blueprint('atgent', __name__)
+sessions = {}
 _loop = None
 _thread_loop = None
 
@@ -36,9 +36,8 @@ def run_async(coro):
     return future.result()
 
 
-@mcp.route('/', methods=['GET'])
+@atgent.route('/', methods=['GET'])
 def index():
-    print("[Server][index][session]: ", session)
     if "session_id" not in session:
         import uuid
 
@@ -46,25 +45,24 @@ def index():
     return render_template("index.html")
 
 
-@mcp.route('/atgent/connect', methods=['POST'])
-def client():
+@atgent.route('/atgent/connect', methods=['POST'])
+def connect():
     try:
         session_id = session.get('session_id')
         if not session_id:
             return jsonify({'success': False, 'message': 'Session not found'}), 400
 
-        if session_id in clients:
+        if session_id in sessions:
+            print("[Server] -> sessions: ", sessions)
             return jsonify({'success': True, 'message': 'Already connected to MCP server'})
 
         client = MCPClient()
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         run_async(client.connect_to_server('server.py'))
         tools_response = run_async(client.client_session.list_tools())
         tools = tools_response.tools
 
-        clients[session_id] = client
+        sessions[session_id] = client
+        print("[Server] -> sessions: ", sessions)
 
         return jsonify(
             {
@@ -76,17 +74,17 @@ def client():
         return jsonify({'success': False, 'message': f'Connection failed: {str(e)}'}), 500
 
 
-@mcp.route('/atgent/query', methods=['POST'])
-def send():
+@atgent.route('/atgent/query', methods=['POST'])
+def query():
     try:
         session_id = session.get('session_id')
         if not session_id:
             return jsonify({'success': False, 'message': 'Session not found'}), 400
 
-        if session_id not in clients:
+        if session_id not in sessions:
             return jsonify({'success': False, 'message': 'Not connected to MCP server. Please connect first.'}), 400
 
-        client = clients[session_id]
+        client = sessions[session_id]
         data = request.get_json()
         query = data.get('query', '').strip()
 
