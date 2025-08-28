@@ -97,3 +97,4 @@ def extract_info(paper_id: str) -> str:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
+    # npx @modelcontextprotocol/inspector uv run servers/server_arxiv.py
