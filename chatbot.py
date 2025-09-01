@@ -1,121 +1,109 @@
+import os
+import json
 import asyncio
-import nest_asyncio
-from typing import List
-from anthropic import Anthropic
-from mcp import ClientSession, StdioServerParameters, types
+from typing import Optional
+from contextlib import AsyncExitStack
+
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from openai import OpenAI
 
-server_params = StdioServerParameters(
-    command = "uv",
-    args = ["run", "servers/server_arxiv.py"],
-    env=None
-)
 
-class ChatBot:
+class MCPClient:
     def __init__(self):
-        self.session: ClientSession = None
-        self.deepseek: Anthropic = Anthropic()
-        self.available_tools: List[dict]|None = None
+        self.session: Optional[ClientSession] = None
+        self.exit_stack = AsyncExitStack()
+        self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com/v1")
 
-    async def process_query(self, query):
+    async def _send_message(self, messages: list, tools: list) -> str:
+        response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
+        return response.choices[0].message
+
+    async def connect_to_server(self):
+        """
+        Connect to an MCP server
+        """
+        server_params = StdioServerParameters(command="uv", args=["run", "servers/server_arxiv.py"], env=None)
+
+        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        read, write = stdio_transport
+        self.session = await self.exit_stack.enter_async_context(ClientSession(read, write))
+
+        await self.session.initialize()
+
+        # List available tools
+        response = await self.session.list_tools()
+        tools = response.tools
+        print("\nConnected to server with tools:", [tool.name for tool in tools])
+
+    async def process_query(self, query: str) -> str:
+        """Process a query using Claude and available tools"""
         messages = [{"role": "user", "content": query}]
-        response = self.deepseek.messages.create(
-            max_tokens=1024,
-            model="deepseek-chat",
-            messages=messages,
-            tools=self.available_tools
-        )
+        final_text = []
 
-        # 开始多轮对话
-        process_query = True
-        while process_query:
-            assistant_content = []
-            for content in response.content:
-                if content.type == "text":
-                    print(content.text)
-                    assistant_content.append(content)
-                    if (len(assistant_content) == 1):
-                        process_query = False
-                elif content.type == "tool_use":
-                    assistant_content.append(content)
-                    messages.append({"role": "assistant", "content": assistant_content})
-                    tool_id = content.id
-                    tool_args = content.input
-                    tool_name = content.name
+        response = await self.session.list_tools()
+        available_tools = [
+            {
+                "type": "function",
+                "function": {"name": tool.name, "description": tool.description, "parameters": tool.inputSchema},
+            }
+            for tool in response.tools
+        ]
 
-                    print(f"Calling tool {tool_name} with args {tool_args}")
-                    result = await self.session.call_tool(tool_name, tool_args)
+        response = await self._send_message(messages=messages, tools=available_tools)
+        messages.append(response)
 
-                    messages.append({
-                         "role": "user",
-                         "content": [
-                             {
-                                "type": "tool_result",
-                                "tool_use_id": tool_id,
-                                "content": result.content
-                             }
-                         ]
-                    })
+        # Process response and handle tool calls
+        if not response.tool_calls:
+            final_text.append(response.content)
+        else:
+            tool = response.tool_calls[0]
+            tool_name = tool.function.name
+            tool_args = tool.function.arguments
 
-                    response = self.deepseek.messages.create(
-                        max_tokens=1024,
-                        model="deepseek-chat",
-                        messages=messages,
-                        tools=self.available_tools
-                    )
+            tool_call_result = await self.session.call_tool(tool_name, json.loads(tool_args))
+            final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
-                    if (len(response.content)) == 1 and response.content[0].type == "text":
-                        print(response.content[0].text)
-                        process_query = False
+            messages.append({"role": "tool", "tool_call_id": tool.id, "content": tool_call_result.content[0].text})
+            response = await self._send_message(messages, available_tools)
+            messages.append(response)
+
+            final_text.append(response.content)
+
+        return "\n".join(final_text)
 
     async def chat_loop(self):
-        print("\nMCP ChatBot Started!")
+        """Run an interactive chat loop"""
+        print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
-        
+
         while True:
             try:
                 query = input("\nQuery: ").strip()
 
-                if query == "quit":
+                if query.lower() == 'quit':
                     break
-                
-                await self.process_query(query)
-                print("\n")
+
+                response = await self.process_query(query)
+                print("\n" + response)
+
             except Exception as e:
-                print(f"\nError: {e}")
+                print(f"\nError: {str(e)}")
 
-    async def connect_to_server_and_run(self):
-        server_params = StdioServerParameters(
-            command = "uv",
-            args = ["run", "servers/server_arxiv.py"],
-            env=None
-        )
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                self.session = session
-                await self.session.initialize()
-
-                response = await self.session.list_tools()
-                tools = response.tools
-                print("\nConnected to server with tools: ", [tool.name for tool in tools])
-
-                self.available_tools = [
-                    {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": tool.inputSchema
-                } for tool in tools
-            ]
-            
-            await self.chat_loop()
+    async def cleanup(self):
+        """Clean up resources"""
+        await self.exit_stack.aclose()
 
 
 async def main():
-    bot = ChatBot()
-    await bot.connect_to_server_and_run()
+    client = MCPClient()
+    try:
+        await client.connect_to_server()
+        await client.chat_loop()
+    finally:
+        await client.cleanup()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
