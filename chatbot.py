@@ -19,6 +19,7 @@ class ToolDefinition(TypedDict):
     description: str
     parameters: dict
 
+
 class MCPClient:
     def __init__(self):
         self.sessions: Optional[ClientSession] = []
@@ -57,8 +58,8 @@ class MCPClient:
                         "function": {
                             "name": tool.name,
                             "description": tool.description,
-                            "parameters": tool.inputSchema
-                        }
+                            "parameters": tool.inputSchema,
+                        },
                     }
                 )
         except Exception as e:
@@ -89,9 +90,9 @@ class MCPClient:
         messages.append(response)
 
         # Process response and handle tool calls
-        if not response.tool_calls:
-            final_text.append(response.content)
-        else:
+        # 循环调用工具
+        epoch = 0
+        while response.tool_calls and epoch < 5:
             tool = response.tool_calls[0]
             tool_name = tool.function.name
             tool_args = tool.function.arguments
@@ -99,12 +100,15 @@ class MCPClient:
             # Call a tool
             session = self.tool_to_session[tool_name]
             tool_call_result = await session.call_tool(tool_name, json.loads(tool_args))
-            final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
+            # final_text.append(f"[Calling tool {tool_name}]")
 
             messages.append({"role": "tool", "tool_call_id": tool.id, "content": tool_call_result.content[0].text})
             response = await self._send_message(messages, self.available_tools)
             messages.append(response)
 
+        if epoch >= 5:
+            final_text.append("[Max tool call limit reached]")
+        else:
             final_text.append(response.content)
 
         return "\n".join(final_text)
