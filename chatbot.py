@@ -14,19 +14,13 @@ from openai import OpenAI
 nest_asyncio.apply()
 
 
-class ToolDefinition(TypedDict):
-    name: str
-    description: str
-    parameters: dict
-
-
 class MCPClient:
     def __init__(self):
-        self.sessions: Optional[ClientSession] = []
+        self.sessions = {}
         self.exit_stack = AsyncExitStack()
         self.deepseek = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com/v1")
-        self.available_tools: list[ToolDefinition] = []
-        self.tool_to_session: Dict[str, ClientSession] = {}
+        self.available_tools = []
+        self.available_prompts = []
 
     async def _send_message(self, messages: list, tools: list) -> str:
         response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
@@ -43,25 +37,47 @@ class MCPClient:
             session = await self.exit_stack.enter_async_context(ClientSession(read, write))
 
             await session.initialize()
-            self.sessions.append(session)
 
-            # List available tools
-            response = await session.list_tools()
-            tools = response.tools
-            print("\nConnected to server with tools:", [tool.name for tool in tools])
+            try:
+                # List available tools
+                response = await session.list_tools()
+                for tool in response.tools:
+                    self.sessions[tool.name] = session
+                    self.available_tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": tool.name,
+                                "description": tool.description,
+                                "parameters": tool.inputSchema,
+                            },
+                        }
+                    )
 
-            for tool in tools:
-                self.tool_to_session[tool.name] = session
-                self.available_tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.inputSchema,
-                        },
-                    }
-                )
+                # List available prompts
+                prompts_response = await session.list_prompts()
+                if prompts_response and prompts_response.prompts:
+                    for prompt in prompts_response.prompts:
+                        self.sessions[prompt.name] = session
+                        self.available_prompts.append(
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": prompt.name,
+                                    "description": prompt.description,
+                                    "parameters": prompt.inputSchema,
+                                },
+                            }
+                        )
+
+                # List available resources
+                resources_response = await session.list_resources()
+                if resources_response and resources_response.resources:
+                    for resource in resources_response.resources:
+                        self.sessions[str(resource.uri)] = session
+            except Exception as e:
+                print(f"Error: {e}")
+
         except Exception as e:
             print(f"Failed to connect to {server_name}: {e}")
 

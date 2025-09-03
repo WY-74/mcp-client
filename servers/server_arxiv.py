@@ -18,17 +18,13 @@ def search_papers(topic: str, max_results: int = 5) -> List[str]:
     Args:
         topic: The topic to search for
         max_results: The maximum number of results to retrieve (default: 5)
-    
+
     Returns:
         List of paper IDs found in the search
     """
     client = arxiv.Client()
 
-    search = arxiv.Search(
-        query=topic,
-        max_results=max_results,
-        sort_by=arxiv.SortCriterion.Relevance
-    )
+    search = arxiv.Search(query=topic, max_results=max_results, sort_by=arxiv.SortCriterion.Relevance)
 
     papers = client.results(search)
 
@@ -53,10 +49,10 @@ def search_papers(topic: str, max_results: int = 5) -> List[str]:
             "authors": [author.name for author in paper.authors],
             "summary": paper.summary,
             "pdf_url": paper.pdf_url,
-            "published": str(paper.published.date())
+            "published": str(paper.published.date()),
         }
         papers_info[paper.get_short_id()] = paper_info
-    
+
     # Save update papers_info to json file
     with open(file_path, "w") as json_file:
         json.dump(papers_info, json_file, indent=2)
@@ -87,12 +83,13 @@ def extract_info(paper_id: str) -> str:
                         paper_info = json.load(json_file)
                         if paper_id in paper_info:
                             return json.dumps(paper_info[paper_id], indent=2)
-            
+
                 except (FileNotFoundError, json.JSONDecodeError) as e:
                     print(f"Error reading {file_path}: {str(e)}")
                     continue
 
     return f"There's no saved information related to paper: {paper_id}."
+
 
 @mcp.resource("papers://folders")
 def get_available_folders() -> str:
@@ -120,6 +117,7 @@ def get_available_folders() -> str:
 
     return content
 
+
 @mcp.resource("papers://{topic}")
 def get_topic_papers(topic: str) -> str:
     """
@@ -133,7 +131,7 @@ def get_topic_papers(topic: str) -> str:
 
     if not os.path.exists(papers_file):
         return f"# No papers found for topic: {topic}\n\nTry searching for papers on this topic first."
-    
+
     try:
         with open(papers_file, "r") as f:
             papers_data = json.load(f)
@@ -150,18 +148,38 @@ def get_topic_papers(topic: str) -> str:
             content += f"- **PDF URL**: [{paper_info['pdf_url']}]({paper_info['pdf_url']})\n\n"
             content += f"### Summary\n{paper_info['summary'][:500]}...\n\n"
             content += "---\n\n"
-        
+
         return content
     except json.JSONDecodeError:
         return f"# Error reading papers data for {topic}\n\nThe papers data file is corrupted."
-    
+
+
 @mcp.prompt
 def generate_search_prompt(topic: str, num_papers: int = 5) -> str:
     """
     Generate a prompt for LLM to find and discuss academic papers on a specific topic.
     """
     return f"""Search for {num_papers} academic papers about '{topic}' using the search_papers tool.
-    Follow the instructions provided by the tool to refine your search and retrieve relevant papers."""
+    
+    Follow these instructions:
+    1. First, search for papers using search_papers(topic='{topic}', max_result={num_papers})
+    2. For each paper found, extract and organize the following information:
+        - Paper title
+        - Authors
+        - Publication date
+        - Brief summary of the key findings
+        - Main contributions or innovations
+        - Methodologies used
+        - Relevance to the topic '{topic}'
+    3. Provide a comprehensive summary that includes:
+        - Overview of the current state of research in '{topic}'
+        - Common themes and trends across the papers
+        - Key research gaps or areas for future investigation
+        - Most impactful or influential papers in this area
+    4. Organize your findings in a clear, structured format with headings and bullet points for easy readability.
+
+    Please present both detailed information about each paper and a high-level synthesis of the research landscape in {topic}."""
+
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
