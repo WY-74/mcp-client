@@ -6,7 +6,6 @@ from mcp.server.fastmcp import FastMCP
 
 
 PAPER_DIR = "papers"
-
 mcp = FastMCP("arxiv")
 
 
@@ -137,7 +136,7 @@ def get_topic_papers(topic: str) -> str:
             papers_data = json.load(f)
 
         # Create markdown content with paper details
-        content += f"# Papers on {topic.replace("_", " ").title()}\n\n"
+        content = f"# Papers on {topic.replace("_", " ").title()}\n\n"
         content += f"Total papers: {len(papers_data)}\n\n"
 
         for paper_id, paper_info in papers_data.items():
@@ -154,7 +153,7 @@ def get_topic_papers(topic: str) -> str:
         return f"# Error reading papers data for {topic}\n\nThe papers data file is corrupted."
 
 
-@mcp.prompt
+@mcp.prompt()
 def generate_search_prompt(topic: str, num_papers: int = 5) -> str:
     """
     Generate a prompt for LLM to find and discuss academic papers on a specific topic.

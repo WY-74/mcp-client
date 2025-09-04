@@ -25,6 +25,31 @@ class MCPClient:
     async def _send_message(self, messages: list, tools: list) -> str:
         response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
         return response.choices[0].message
+    
+    async def _get_resource(self, resource_uri):
+        session = self.sessions.get(resource_uri)
+
+        # Fallback for papers URIs - try any papers resource session
+        if not session and resource_uri.startswith("papers://"):
+            for uri, sess in self.sessions.items():
+                if uri.startswith("papers://"):
+                    session = sess
+                    break
+
+        if not session:
+            print(f"Resource '{resource_uri}' not found.")
+            return
+        
+        try:
+            result = await session.read_resource(uri=resource_uri)
+            if result and result.contents:
+                print(f"\nResource: {resource_uri}")
+                print("Content:")
+                print(result.contents[0].text)
+            else:
+                print("No content available.")
+        except Exception as e:
+            print(f"Error: {e}")
 
     async def connect_to_server(self, server_name: str, server_config: dict) -> None:
         """
@@ -61,12 +86,9 @@ class MCPClient:
                         self.sessions[prompt.name] = session
                         self.available_prompts.append(
                             {
-                                "type": "function",
-                                "function": {
-                                    "name": prompt.name,
-                                    "description": prompt.description,
-                                    "parameters": prompt.inputSchema,
-                                },
+                                "name": prompt.name,
+                                "description": prompt.description,
+                                "arguments": prompt.arguments,
                             }
                         )
 
@@ -97,6 +119,44 @@ class MCPClient:
             print(f"Error loading server configuration: {e}")
             raise
 
+    async def list_prompts(self):
+        if not self.available_prompts:
+            print("No prompts available.")
+            return
+
+        print("\nAvailable Prompts:")
+        for prompt in self.available_prompts:
+            print(f"- {prompt['name']}: {prompt['description']}")
+            if prompt["arguments"]:
+                print(f"  Arguments:")
+                for arg in prompt["arguments"]:
+                    arg_name = arg.name if hasattr(arg, "name") else arg.get("name", "")
+                    print(f"    - {arg_name}")
+    
+    async def execute_prompt(self, prompt_name, args):
+        """Execute a prompt with the given arguments."""
+        session = self.sessions.get(prompt_name)
+        if not session:
+            print(f"Prompt '{prompt_name}' not found.")
+            return
+        try:
+            result = await session.get_prompt(prompt_name, arguments=args)
+            if result and result.messages:
+                prompt_content = result.messages[0].content
+
+                # Extract text from content (handles different content formats)
+                if isinstance(prompt_content, str):
+                    text = prompt_content
+                elif hasattr(prompt_content, "text"):
+                    text = prompt_content.text
+                else:
+                    text = " ".join(item.text if hasattr(item, "text") else str(item) for item in prompt_content)
+                
+                print(f"\nExecuted prompt '{prompt_name}'...")
+                await self.process_query(text)
+        except Exception as e:
+            print(f"Error: {e}")
+
     async def process_query(self, query: str) -> str:
         """Process a query using Claude and available tools"""
         messages = [{"role": "user", "content": query}]
@@ -114,7 +174,7 @@ class MCPClient:
             tool_args = tool.function.arguments
 
             # Call a tool
-            session = self.tool_to_session[tool_name]
+            session = self.sessions[tool_name]
             tool_call_result = await session.call_tool(tool_name, json.loads(tool_args))
             # final_text.append(f"[Calling tool {tool_name}]")
 
@@ -133,16 +193,40 @@ class MCPClient:
         """Run an interactive chat loop"""
         print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
+        print("Use @folders to see available topics")
+        print("Use @<topic> to search papers in that topic")
+        print("Use /prompts to list available prompts")
+        print("Use /prompt <name> <arg1=value1> to execute a prompt")
 
         while True:
             try:
                 query = input("\nQuery: ").strip()
+                if not query:
+                    continue
 
                 if query.lower() == 'quit':
                     break
 
+                # Check for @resource syntax first
+                if query.startswith("@"):
+                    # remove @ sign
+                    topic = query[1:]
+                    if topic == "folders":
+                        resource_uri = "papers://folders"
+                    else:
+                        resource_uri = f"papers://{topic}"
+                    await self._get_resource(resource_uri)
+                    continue
+
                 response = await self.process_query(query)
                 print("\n" + response)
+
+                # Check for /command syntax
+                if query.startswith("/"):
+                    parts = query.split()
+                    command = parts[0].lower()
+                    if command == "/prompts":
+                        await self.list_prompts()
 
             except Exception as e:
                 print(f"\nError: {str(e)}")
@@ -157,6 +241,8 @@ async def main():
     try:
         await client.connect_to_servers()
         await client.chat_loop()
+        with open("messages.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(client.messages))
     finally:
         await client.cleanup()
 
