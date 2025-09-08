@@ -25,7 +25,7 @@ class MCPClient:
     async def _send_message(self, messages: list, tools: list) -> str:
         response = self.deepseek.chat.completions.create(model="deepseek-chat", messages=messages, tools=tools)
         return response.choices[0].message
-    
+
     async def _get_resource(self, resource_uri):
         session = self.sessions.get(resource_uri)
 
@@ -39,7 +39,7 @@ class MCPClient:
         if not session:
             print(f"Resource '{resource_uri}' not found.")
             return
-        
+
         try:
             result = await session.read_resource(uri=resource_uri)
             if result and result.contents:
@@ -51,7 +51,45 @@ class MCPClient:
         except Exception as e:
             print(f"Error: {e}")
 
-    async def connect_to_server(self, server_name: str, server_config: dict) -> None:
+    async def _list_prompts(self):
+        if not self.available_prompts:
+            print("No prompts available.")
+            return
+
+        print("\nAvailable Prompts:")
+        for prompt in self.available_prompts:
+            print(f"- {prompt['name']}: {prompt['description']}")
+            if prompt["arguments"]:
+                print(f"  Arguments:")
+                for arg in prompt["arguments"]:
+                    arg_name = arg.name if hasattr(arg, "name") else arg.get("name", "")
+                    print(f"    - {arg_name}")
+
+    async def _execute_prompt(self, prompt_name, args):
+        """Execute a prompt with the given arguments."""
+        session = self.sessions.get(prompt_name)
+        if not session:
+            print(f"Prompt '{prompt_name}' not found.")
+            return
+        try:
+            result = await session.get_prompt(prompt_name, arguments=args)
+            if result and result.messages:
+                prompt_content = result.messages[0].content
+
+                # Extract text from content (handles different content formats)
+                if isinstance(prompt_content, str):
+                    text = prompt_content
+                elif hasattr(prompt_content, "text"):
+                    text = prompt_content.text
+                else:
+                    text = " ".join(item.text if hasattr(item, "text") else str(item) for item in prompt_content)
+
+                print(f"\nExecuted prompt '{prompt_name}'...")
+                await self.process_query(text)
+        except Exception as e:
+            print(f"Error: {e}")
+
+    async def _connect_to_server(self, server_name: str, server_config: dict) -> None:
         """
         Connect to an MCP server
         """
@@ -114,50 +152,12 @@ class MCPClient:
             servers = data.get("mcpServers", {})
 
             for server_name, server_config in servers.items():
-                await self.connect_to_server(server_name, server_config)
+                await self._connect_to_server(server_name, server_config)
         except Exception as e:
             print(f"Error loading server configuration: {e}")
             raise
 
-    async def list_prompts(self):
-        if not self.available_prompts:
-            print("No prompts available.")
-            return
-
-        print("\nAvailable Prompts:")
-        for prompt in self.available_prompts:
-            print(f"- {prompt['name']}: {prompt['description']}")
-            if prompt["arguments"]:
-                print(f"  Arguments:")
-                for arg in prompt["arguments"]:
-                    arg_name = arg.name if hasattr(arg, "name") else arg.get("name", "")
-                    print(f"    - {arg_name}")
-    
-    async def execute_prompt(self, prompt_name, args):
-        """Execute a prompt with the given arguments."""
-        session = self.sessions.get(prompt_name)
-        if not session:
-            print(f"Prompt '{prompt_name}' not found.")
-            return
-        try:
-            result = await session.get_prompt(prompt_name, arguments=args)
-            if result and result.messages:
-                prompt_content = result.messages[0].content
-
-                # Extract text from content (handles different content formats)
-                if isinstance(prompt_content, str):
-                    text = prompt_content
-                elif hasattr(prompt_content, "text"):
-                    text = prompt_content.text
-                else:
-                    text = " ".join(item.text if hasattr(item, "text") else str(item) for item in prompt_content)
-                
-                print(f"\nExecuted prompt '{prompt_name}'...")
-                await self.process_query(text)
-        except Exception as e:
-            print(f"Error: {e}")
-
-    async def process_query(self, query: str) -> str:
+    async def _process_query(self, query: str) -> str:
         """Process a query using Claude and available tools"""
         messages = [{"role": "user", "content": query}]
         final_text = []
@@ -218,15 +218,29 @@ class MCPClient:
                     await self._get_resource(resource_uri)
                     continue
 
-                response = await self.process_query(query)
-                print("\n" + response)
-
                 # Check for /command syntax
                 if query.startswith("/"):
                     parts = query.split()
                     command = parts[0].lower()
                     if command == "/prompts":
-                        await self.list_prompts()
+                        await self._list_prompts()
+                    elif command == "/prompt":
+                        if len(parts) < 2:
+                            print("Usage: /prompt <name> <arg1=value1> <arg2=value2>")
+                            continue
+                        prompt_name = parts[1]
+                        args = {}
+                        for arg in parts[2:]:
+                            if '=' in arg:
+                                key, value = arg.split('=', 1)
+                                args[key] = value
+                        await self._execute_prompt(prompt_name, args)
+                    else:
+                        print(f"Unknown command: {command}")
+                    continue
+
+                response = await self._process_query(query)
+                print("\n" + response)
 
             except Exception as e:
                 print(f"\nError: {str(e)}")
@@ -241,8 +255,6 @@ async def main():
     try:
         await client.connect_to_servers()
         await client.chat_loop()
-        with open("messages.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(client.messages))
     finally:
         await client.cleanup()
 
